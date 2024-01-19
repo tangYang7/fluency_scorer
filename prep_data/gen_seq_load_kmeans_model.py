@@ -84,24 +84,11 @@ tr_dataloader = DataLoader(tr_dataset, batch_size=batch_size, shuffle=False)
 te_dataset = fluDataset('test')
 te_dataloader = DataLoader(te_dataset, batch_size=batch_size, shuffle=False)
 
-num_clusters = 50
-warnings.simplefilter(action='ignore', category=FutureWarning)
-cluster = MiniBatchKMeans(n_clusters=num_clusters)
-
-extract_feat_tensor, saved_tensor_dict = load_feature(tr_dataloader, 'tr')
-
-print('Start k-means fit...')
-cluster.fit(extract_feat_tensor.numpy())
-print('done!')
-
 model_output_path = '../exp/kmeans'
-if not os.path.isdir(model_output_path):
-    os.mkdir(model_output_path)
-joblib.dump(cluster, f'{model_output_path}/kmeans_model.joblib')
-print("Saved KMeans model.")
+cluster = joblib.load(f'{model_output_path}/kmeans_model.joblib')
 
 print('Start k-means prediction...')
-cluster_pred(tr_dataloader, saved_tensor_dict, 'tr')
+# cluster_pred(tr_dataloader, saved_tensor_dict, 'tr')
 extract_feat_tensor, saved_tensor_dict = load_feature(te_dataloader, 'te')
 cluster_pred(te_dataloader, saved_tensor_dict, 'te')
 print('done!')
