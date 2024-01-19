@@ -1,0 +1,9 @@
+speechocean762/
+norm_test.py
+pooling_test.py
+todo.txt
+models/__pycache__
+exp/*
+!exp/README.md
+data/*
+!data/README.md
