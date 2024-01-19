@@ -46,7 +46,7 @@ te_dataset = fluDataset('test')
 te_dataloader = DataLoader(te_dataset, batch_size=batch_size, shuffle=False)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = 'cpu'
+# device = 'cpu'
 wav2vec2 = torchaudio.pipelines.WAV2VEC2_LARGE.get_model()
 wav2vec2 = wav2vec2.to(device)
 
@@ -91,8 +91,9 @@ def extract_feature(dataLoader, dataset_type):
 
     saved_tensor_dict = {}
     for j, (paths, utt_label) in enumerate(dataLoader):
-        if paths not in saved_tensor_dict:
-            saved_tensor_dict[paths] = padded_tensors[j]
+        for path in paths:
+            if path not in saved_tensor_dict:
+                saved_tensor_dict[path] = padded_tensors[j][0]
         # if j == 7:
         #     break
 
@@ -140,4 +141,4 @@ def cluster_pred(dataLoader, extract_feat_tensor, saved_tensor_dict, dataset_typ
 extract_feat_tensor, saved_tensor_dict = extract_feature(tr_dataloader, 'tr')
 extract_feat_tensor, saved_tensor_dict = extract_feature(te_dataloader, 'te')
 # cluster_pred(tr_dataloader, extract_feat_tensor, saved_tensor_dict, 'tr')
-print('Gen_seq_acoustic_featutre: done.')
+print('Gen_seq_acoustic_feature: done.')
