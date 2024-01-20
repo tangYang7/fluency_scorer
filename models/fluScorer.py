@@ -41,7 +41,7 @@ class BiLSTMScorer(nn.Module):
         self.mean_pooling = nn.AvgPool2d(kernel_size=(input_seq, 1))
         self.fc = nn.Linear(2*hidden_size, 1)
         self.activations = nn.ModuleDict([
-                ['tenh', nn.Tanh()],
+                ['tanh', nn.Tanh()],
                 ['GELU', nn.GELU()],
         ])
         self.input_max_len = input_seq
