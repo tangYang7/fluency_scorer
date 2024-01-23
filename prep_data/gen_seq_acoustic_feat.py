@@ -4,21 +4,11 @@ import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
 from tqdm import tqdm
-from sklearn.cluster import KMeans, MiniBatchKMeans
-import warnings
 import pickle
 
 def load_file(path):
     file = np.loadtxt(path, delimiter=',', dtype=str)
     return file
-
-def convert_bin(input):
-    # Convert each number to its binary representation
-    binary_representations = [list(map(int, bin(num)[2:].zfill(6))) for num in input]
-    
-    # Convert to a PyTorch tensor
-    tensor_2d = torch.tensor(binary_representations)
-    return tensor_2d
 
 class fluDataset(Dataset):
     def __init__(self, set):
@@ -77,68 +67,26 @@ def extract_feature(dataLoader, dataset_type):
         # print(my_feature.size())
         # print(my_feature)
         extract_feat_list.append(my_feature)
-        # if j == 7:
-        #     break
 
     print('====================')
-
-    max_length = max(tensor.size(1) for tensor in extract_feat_list)
-    padded_tensors = [torch.nn.functional.pad(tensor, (0, 0, 0, max_length - tensor.size(1)), value=0)[:, :max_length, :] for tensor in extract_feat_list]
-    
-    # for padded_tensor in padded_tensors:
-    #     print(padded_tensor.size())
-    #     print(padded_tensor)
 
     saved_tensor_dict = {}
     for j, (paths, utt_label) in enumerate(dataLoader):
         for path in paths:
             if path not in saved_tensor_dict:
-                saved_tensor_dict[path] = padded_tensors[j][0]
-        # if j == 7:
-        #     break
+                saved_tensor_dict[path] = extract_feat_list[j][0]
 
     with open(f'../data/{dataset_type}_feats.pkl', 'wb') as file:
         pickle.dump(saved_tensor_dict, file)
 
-    extract_feat_tensor = torch.cat(padded_tensors, dim=1)  # cat all frames in 1024 dim
-    # print(extract_feat_tensor.shape)
+    extract_feat_tensor = torch.cat(extract_feat_list, dim=1)  # cat all frames in 1024 dim
+    print(extract_feat_tensor.shape)
     extract_feat_tensor = extract_feat_tensor.view(extract_feat_tensor.size(1), -1)
     print(extract_feat_tensor.shape)
 
     return extract_feat_tensor, saved_tensor_dict
 
-def cluster_pred(dataLoader, extract_feat_tensor, saved_tensor_dict, dataset_type):
-    print('Start k-means prediction...')
-    num_clusters = 50
-    warnings.simplefilter(action='ignore', category=FutureWarning)
-    cluster = KMeans(n_clusters=num_clusters)
-
-    cluster_pred_dict = {}
-    cluster_index_dict = {}
-    cluster.fit(extract_feat_tensor.cpu().detach().numpy())
-    print('done!')
-
-    for j, (paths, utt_label) in enumerate(dataLoader):
-        feat_tensor = saved_tensor_dict[paths].view(saved_tensor_dict[paths].size(1), -1)
-        # print(feat_tensor.shape)
-        cluster_pred = cluster.predict(feat_tensor.numpy())
-        # print(cluster_pred)
-        cluster_pred_bin = convert_bin(cluster_pred)
-        if paths not in cluster_pred_dict:
-            cluster_pred_dict[paths] = cluster_pred_bin
-        # if j == 7:
-        #     break
-
-    for i in range(len(cluster.cluster_centers_)):
-        cluster_index_dict[i] = cluster.cluster_centers_[i]
-
-    with open(f'../data/{dataset_type}_cluster_index.pkl', 'wb') as file:
-        pickle.dump(cluster_pred_dict, file)
-    with open(f'../data/cluster_centers.pkl', 'wb') as file:
-        pickle.dump(cluster_index_dict, file)
-
 
 extract_feat_tensor, saved_tensor_dict = extract_feature(tr_dataloader, 'tr')
 extract_feat_tensor, saved_tensor_dict = extract_feature(te_dataloader, 'te')
-# cluster_pred(tr_dataloader, extract_feat_tensor, saved_tensor_dict, 'tr')
 print('Gen_seq_acoustic_feature: done.')
