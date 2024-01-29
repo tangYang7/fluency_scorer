@@ -2,6 +2,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+def mean_pooling(feature_tensor: torch.Tensor, padding_value: int = 0):
+    mask = feature_tensor != padding_value
+    count = torch.sum(mask, axis=1)
+    feature_tensor = torch.where(mask, feature_tensor, 0)
+    mean = torch.sum(feature_tensor, axis=1) / count
+
+    return mean
+
 class BiLSTM(nn.Module):
     def __init__(self, input_size: int, hidden_size: int, num_layers: int):
         super().__init__()
@@ -38,7 +46,9 @@ class BiLSTMScorer(nn.Module):
         super().__init__()
         # x, 32, 2??
         self.blstm = BiLSTM(input_size, hidden_size, num_layers=num_layers)
-        self.mean_pooling = nn.AvgPool2d(kernel_size=(input_seq, 1))
+        self.mean_pooling = nn.AvgPool1d(kernel_size=(input_seq, 1), 
+                                         padding=0, count_include_pad=False,
+                                         )
         self.fc = nn.Linear(2*hidden_size, 1)
         self.activations = nn.ModuleDict([
                 ['tanh', nn.Tanh()],
@@ -47,9 +57,20 @@ class BiLSTMScorer(nn.Module):
         self.input_max_len = input_seq
     
     def forward(self, x, act=None):
+        #
         BiLSTM_embedding = self.blstm(x)
-        padding_BiLSTM_embedding = F.pad(BiLSTM_embedding, (0, 0, 0, self.input_max_len - x.size(1)))
-        output = self.mean_pooling(padding_BiLSTM_embedding)
+        #
+        # padding_BiLSTM_embedding = F.pad(BiLSTM_embedding, (0, 0, 0, self.input_max_len - x.size(1)))
+        # output = self.mean_pooling(padding_BiLSTM_embedding)
+
+        output = mean_pooling(BiLSTM_embedding)
+        # 假設我們有一個形狀為(batch, seq, dim)的張量，其中包含一些填充值
+        # feature_tensor = torch.randn((batch, seq, dim))
+        # padding_value = 0
+
+        # # 使用masked mean函數進行mean pooling
+        # mean_tensor = masked_mean(feature_tensor, padding_value)
+
         score = self.fc(output)
 
         if act != None:

@@ -19,33 +19,26 @@ def load_feature(dataLoader, dataset_type):
     for j, (paths, utt_label) in enumerate(dataLoader):
         for path in paths:
             feats = saved_tensor_dict[path]
-        extract_feat_list.append(feats)
+            extract_feat_list.append(feats)
 
     extract_feat_tensor = torch.concat(extract_feat_list, dim=0)
     print(extract_feat_tensor.shape)
     return extract_feat_tensor, saved_tensor_dict
 
 def cluster_pred(dataLoader, saved_tensor_dict, dataset_type):
-    cluster_pred_dict, cluster_index_dict = {}, {}
+    cluster_pred_dict = {}
     for j, (paths, utt_label) in enumerate(dataLoader):
         for path in paths:
             feat_tensor = saved_tensor_dict[path]
             # print(feat_tensor.shape)
             cluster_pred = cluster.predict(feat_tensor.numpy())
-            # print(cluster_pred)
-            cluster_pred_bin = convert_bin(cluster_pred)
+            cluster_pred_tensor = torch.tensor(cluster_pred)
+            # print(cluster_pred_tensor)
             if path not in cluster_pred_dict:
-                cluster_pred_dict[path] = cluster_pred_bin
-
-    for i in range(len(cluster.cluster_centers_)):
-        cluster_index_dict[i] = cluster.cluster_centers_[i]
+                cluster_pred_dict[path] = cluster_pred_tensor
 
     with open(f'../data/{dataset_type}_cluster_index.pkl', 'wb') as file:
         pickle.dump(cluster_pred_dict, file)
-    if dataset_type == 'te':
-        return 
-    with open(f'../data/cluster_centers.pkl', 'wb') as file:
-        pickle.dump(cluster_index_dict, file)
 
 def load_file(path):
     file = np.loadtxt(path, delimiter=',', dtype=str)
@@ -84,26 +77,35 @@ tr_dataloader = DataLoader(tr_dataset, batch_size=batch_size, shuffle=False)
 te_dataset = fluDataset('test')
 te_dataloader = DataLoader(te_dataset, batch_size=batch_size, shuffle=False)
 
-num_clusters = 50
+max_iter, num_clusters, bs, n_init = 100, 50, 10000, 20
 warnings.simplefilter(action='ignore', category=FutureWarning)
-cluster = MiniBatchKMeans(n_clusters=num_clusters)
+cluster = MiniBatchKMeans(n_clusters=num_clusters,
+                          max_iter=max_iter,
+                          batch_size=bs,
+                          n_init=n_init,
+                        #   compute_labels=False,
+                          )
 
 extract_feat_tensor, saved_tensor_dict = load_feature(tr_dataloader, 'tr')
 
 print('Start k-means fit...')
 cluster.fit(extract_feat_tensor.numpy())
-print('done!')
+print('\033[1;34mMission Completed: cluster_fit X.\033[0m')
 
 model_output_path = '../exp/kmeans'
 if not os.path.isdir(model_output_path):
     os.mkdir(model_output_path)
 joblib.dump(cluster, f'{model_output_path}/kmeans_model.joblib')
+
+cluster_index_dict = {}
+for i in range(len(cluster.cluster_centers_)):
+    cluster_index_dict[i] = cluster.cluster_centers_[i]
+with open(f'../data/cluster_centers.pkl', 'wb') as file:
+    pickle.dump(cluster_index_dict, file)
 print("Saved KMeans model.")
 
 print('Start k-means prediction...')
 cluster_pred(tr_dataloader, saved_tensor_dict, 'tr')
 extract_feat_tensor, saved_tensor_dict = load_feature(te_dataloader, 'te')
 cluster_pred(te_dataloader, saved_tensor_dict, 'te')
-print('done!')
-
-print('Gen_seq_cluster: done.')
+print('\033[1;34mMission Completed: cluster prediction.\033[0m')

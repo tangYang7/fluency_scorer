@@ -13,8 +13,7 @@
 set -x
 
 lr=1e-3
-# batch_size=4
-batch_size=32
+batch_size=25
 embed_dim=32
 num_epochs=100
 model=fluScorer
