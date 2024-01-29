@@ -5,6 +5,7 @@ import os
 import time
 from torch.utils.data import Dataset, DataLoader
 from torchaudio import load
+import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 import pickle
@@ -45,10 +46,36 @@ def cluster_pred(feats, model):
     cluster_index_tensor = torch.stack(cluster_index_list, dim=0)
     return cluster_index_tensor
 
+def draw_train_fig(train_mse_values, val_mse_values, train_corr_values, val_corr_values, epochs_list, exp_dir):
+    plt.figure(figsize=(10, 5))
+
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs_list, train_mse_values, label='Training MSE')
+    plt.plot(epochs_list, val_mse_values, label='Validation MSE')
+    plt.title('Training and Validation MSE')
+    plt.xlabel('Epoch')
+    plt.ylabel('MSE')
+    plt.legend()
+
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs_list, train_corr_values, label='Training Correlation')
+    plt.plot(epochs_list, val_corr_values, label='Validation Correlation')
+    plt.title('Training and Validation Correlation')
+    plt.xlabel('Epoch')
+    plt.ylabel('Correlation')
+    plt.legend()
+
+    plt.tight_layout()
+    plt.savefig(f"{exp_dir}/train.jpg")
+
 def train(audio_model, train_loader, test_loader, args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # device = 'cpu'
     print('running on ' + str(device))
+
+    train_mse_values, train_corr_values = [], []
+    val_mse_values, val_corr_values = [], []
+    epochs_list = []
 
     # best_cum_mAP is checkpoint ensemble from the first epoch to the best epoch
     best_epoch, best_mse = 0, 999
@@ -121,6 +148,12 @@ def train(audio_model, train_loader, test_loader, args):
         tr_mse, tr_corr = validate(audio_model, train_loader, args, -1, kmeans_model)
         te_mse, te_corr = validate(audio_model, test_loader, args, best_mse, kmeans_model)
 
+        train_mse_values.append(tr_mse)
+        train_corr_values.append(tr_corr)
+        val_mse_values.append(te_mse)
+        val_corr_values.append(te_corr)
+        epochs_list.append(epoch)
+
         print('Flency: Train MSE: {:.3f}, CORR: {:.3f}'.format(tr_mse.item(), tr_corr))
         print('Flency: Test MSE: {:.3f}, CORR: {:.3f}'.format(te_mse.item(), te_corr))
 
@@ -141,6 +174,8 @@ def train(audio_model, train_loader, test_loader, args):
 
         print('Epoch-{0} lr: {1}'.format(epoch, optimizer.param_groups[0]['lr']))
         epoch += 1
+
+    draw_train_fig(train_mse_values, val_mse_values, train_corr_values, val_corr_values, epochs_list, exp_dir)
 
 def validate(audio_model, val_loader, args, best_mse, kmeans_model=None):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

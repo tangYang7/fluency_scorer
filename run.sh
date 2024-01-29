@@ -27,8 +27,7 @@ fluScorer
 exp_dir=exp/flu-${lr}-${depth}-${batch_size}-${embed_dim}-${model}-${am}-br
 
 # repeat times
-# repeat_list=(0 1 2 3 4)
-repeat_list=(0)
+repeat_list=(0 1 2 3 4)
 
 for repeat in "${repeat_list[@]}"
 do
