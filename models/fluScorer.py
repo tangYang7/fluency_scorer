@@ -38,38 +38,23 @@ class BiLSTM(nn.Module):
     
 # adapt: tanh -> GELU    
 class BiLSTMScorer(nn.Module):
-    def __init__(self, input_seq: int, input_size: int, hidden_size: int, num_layers: int = 2):
+    def __init__(self, input_size: int, hidden_size: int, num_layers: int = 2):
         '''
         input_seq: the input length by default. \n
         BiLSTM(input_size, hidden_size, num_layers=num_layers)
         '''
         super().__init__()
-        # x, 32, 2??
         self.blstm = BiLSTM(input_size, hidden_size, num_layers=num_layers)
-        self.mean_pooling = nn.AvgPool1d(kernel_size=(input_seq, 1), 
-                                         padding=0, count_include_pad=False,
-                                         )
         self.fc = nn.Linear(2*hidden_size, 1)
         self.activations = nn.ModuleDict([
                 ['tanh', nn.Tanh()],
                 ['GELU', nn.GELU()],
         ])
-        self.input_max_len = input_seq
     
     def forward(self, x, act=None):
-        #
         BiLSTM_embedding = self.blstm(x)
-        #
-        # padding_BiLSTM_embedding = F.pad(BiLSTM_embedding, (0, 0, 0, self.input_max_len - x.size(1)))
-        # output = self.mean_pooling(padding_BiLSTM_embedding)
 
         output = mean_pooling(BiLSTM_embedding)
-        # 假設我們有一個形狀為(batch, seq, dim)的張量，其中包含一些填充值
-        # feature_tensor = torch.randn((batch, seq, dim))
-        # padding_value = 0
-
-        # # 使用masked mean函數進行mean pooling
-        # mean_tensor = masked_mean(feature_tensor, padding_value)
 
         score = self.fc(output)
 
@@ -98,7 +83,7 @@ class FluencyScorerNoclu(nn.Module):
             nn.LayerNorm(input_dim),
             nn.Tanh()
         )
-        self.scorer = BiLSTMScorer(750, input_dim, embed_dim, 2)
+        self.scorer = BiLSTMScorer(input_dim, embed_dim, 2)
 
     def forward(self, x):
         ''' 
@@ -123,7 +108,7 @@ class FluencyScorer(nn.Module):
             nn.LayerNorm(input_dim),
             nn.Tanh()
         )
-        self.scorer = BiLSTMScorer(750, input_dim+clustering_dim, embed_dim, 2)
+        self.scorer = BiLSTMScorer(input_dim+clustering_dim, embed_dim, 2)
 
     def forward(self, x, cluster_x):
         ''' 
