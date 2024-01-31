@@ -1,0 +1,3 @@
+python3 gen_seq_acoustic_feat.py
+python3 gen_seq_cluster.py
+python3 gen_seq_model_metric.py

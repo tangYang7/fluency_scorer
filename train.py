@@ -36,7 +36,7 @@ def convert_bin(input, num_binary=6):
     return tensor_2d
 
 def cluster_pred(feats, model):
-    feats = feats.numpy()
+    feats = feats.cpu().numpy()
     cluster_index_list = []
     for feat in feats:
         pred = model.predict(feat)
@@ -70,7 +70,6 @@ def draw_train_fig(train_mse_values, val_mse_values, train_corr_values, val_corr
 
 def train(audio_model, train_loader, test_loader, args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # device = 'cpu'
     print('running on ' + str(device))
 
     train_mse_values, train_corr_values = [], []
@@ -84,10 +83,10 @@ def train(audio_model, train_loader, test_loader, args):
 
     if not isinstance(audio_model, nn.DataParallel):
         audio_model = nn.DataParallel(audio_model)
+    audio_model = audio_model.to(device)
 
     if args.model == 'fluScorer':
         kmeans_model = joblib.load(f'exp/kmeans/kmeans_model.joblib')
-        audio_model = audio_model.to(device)
     else:
         kmeans_model = None
 

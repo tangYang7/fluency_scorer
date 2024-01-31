@@ -1,5 +1,4 @@
 import torch
-import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import pickle
@@ -82,7 +81,7 @@ cluster = joblib.load(f'{model_path}/kmeans_model.joblib')
 
 extract_feat_tensor, saved_tensor_dict = load_feature(tr_dataloader, 'tr')
 print('<train>')
-feat_numpy = extract_feat_tensor.numpy()
+feat_numpy = extract_feat_tensor.cpu().numpy()
 labels = cluster.predict(feat_numpy)
 
 db_score = davies_bouldin_score(feat_numpy, labels)
@@ -95,7 +94,7 @@ print(f'Calinski-Harabasz Score: {ch_score :.3f} (⬆)')
 
 print('<test>')
 extract_feat_tensor, saved_tensor_dict = load_feature(te_dataloader, 'te')
-feat_numpy = extract_feat_tensor.numpy()
+feat_numpy = extract_feat_tensor.cpu().numpy()
 labels = cluster.predict(feat_numpy)
 
 db_score = davies_bouldin_score(feat_numpy, labels)

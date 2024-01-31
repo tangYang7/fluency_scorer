@@ -1,8 +1,6 @@
 import torch
-import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
-from tqdm import tqdm
 from sklearn.cluster import KMeans, MiniBatchKMeans
 import warnings
 import pickle
@@ -19,7 +17,7 @@ def load_feature(dataLoader, dataset_type):
     for j, (paths, utt_label) in enumerate(dataLoader):
         for path in paths:
             feats = saved_tensor_dict[path]
-            extract_feat_list.append(feats)
+            extract_feat_list.append(feats.cpu())
 
     extract_feat_tensor = torch.concat(extract_feat_list, dim=0)
     print(extract_feat_tensor.shape)
@@ -31,7 +29,7 @@ def cluster_pred(dataLoader, saved_tensor_dict, dataset_type):
         for path in paths:
             feat_tensor = saved_tensor_dict[path]
             # print(feat_tensor.shape)
-            cluster_pred = cluster.predict(feat_tensor.numpy())
+            cluster_pred = cluster.predict(feat_tensor.cpu().numpy())
             cluster_pred_tensor = torch.tensor(cluster_pred)
             # print(cluster_pred_tensor)
             if path not in cluster_pred_dict:
@@ -43,14 +41,6 @@ def cluster_pred(dataLoader, saved_tensor_dict, dataset_type):
 def load_file(path):
     file = np.loadtxt(path, delimiter=',', dtype=str)
     return file
-
-def convert_bin(input):
-    # Convert each number to its binary representation
-    binary_representations = [list(map(int, bin(num)[2:].zfill(6))) for num in input]
-    
-    # Convert to a PyTorch tensor
-    tensor_2d = torch.tensor(binary_representations)
-    return tensor_2d
 
 class fluDataset(Dataset):
     def __init__(self, set):
@@ -77,14 +67,14 @@ tr_dataloader = DataLoader(tr_dataset, batch_size=batch_size, shuffle=False)
 te_dataset = fluDataset('test')
 te_dataloader = DataLoader(te_dataset, batch_size=batch_size, shuffle=False)
 
-max_iter, num_clusters, bs, n_init = 100, 50, 10000, 20
+max_iter, num_clusters, bs, n_init = 100, 30, 10000, 20
 warnings.simplefilter(action='ignore', category=FutureWarning)
-cluster = MiniBatchKMeans(n_clusters=num_clusters,
-                          max_iter=max_iter,
-                          batch_size=bs,
-                          n_init=n_init,
-                        #   compute_labels=False,
-                          )
+cluster = KMeans(n_clusters=num_clusters)
+# cluster = MiniBatchKMeans(n_clusters=num_clusters,
+#                           max_iter=max_iter,
+#                           batch_size=bs,
+#                           n_init=n_init,
+#                           )
 
 extract_feat_tensor, saved_tensor_dict = load_feature(tr_dataloader, 'tr')
 

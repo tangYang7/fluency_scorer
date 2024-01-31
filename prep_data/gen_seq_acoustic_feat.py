@@ -11,13 +11,13 @@ def load_file(path):
     return file
 
 class fluDataset(Dataset):
-    def __init__(self, set):
-        paths = load_file(f'../speechocean762/{set}/wav.scp')
+    def __init__(self, types):
+        paths = load_file(f'../speechocean762/{types}/wav.scp')
         for i in range(paths.shape[0]):
             paths[i] = paths[i].split('\t')[1]
-        if set == 'train':
+        if types == 'train':
             self.utt_label = torch.tensor(np.load('../data/tr_label_utt.npy'), dtype=torch.float)
-        elif set == 'test':
+        elif types == 'test':
             self.utt_label = torch.tensor(np.load('../data/te_label_utt.npy'), dtype=torch.float)
         self.paths = paths
 
@@ -66,7 +66,7 @@ def extract_feature(dataLoader, dataset_type):
                 my_feature = feats
         # print(my_feature.size())
         # print(my_feature)
-        extract_feat_list.append(my_feature)
+        extract_feat_list.append(my_feature.cpu())
 
     print('====================')
 
@@ -80,7 +80,7 @@ def extract_feature(dataLoader, dataset_type):
         pickle.dump(saved_tensor_dict, file)
 
     extract_feat_tensor = torch.cat(extract_feat_list, dim=1)  # cat all frames in 1024 dim
-    print(extract_feat_tensor.shape)
+    # print(extract_feat_tensor.shape)
     extract_feat_tensor = extract_feat_tensor.view(extract_feat_tensor.size(1), -1)
     print(extract_feat_tensor.shape)
 
