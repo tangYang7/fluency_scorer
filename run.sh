@@ -18,11 +18,11 @@ embed_dim=32
 num_epochs=50
 model=fluScorer
 am=wav2vec2_large
-'''
-model: 
-fluScorerNoclu
-fluScorer
-'''
+
+model(){
+  fluScorerNoclu
+  fluScorer
+}
 
 exp_dir=exp/flu-${lr}-${depth}-${batch_size}-${embed_dim}-${model}-${am}-br
 

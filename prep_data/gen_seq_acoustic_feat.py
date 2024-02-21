@@ -35,7 +35,8 @@ te_dataset = fluDataset('test')
 te_dataloader = DataLoader(te_dataset, batch_size=batch_size, shuffle=False)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-wav2vec2 = torchaudio.pipelines.WAV2VEC2_LARGE.get_model()
+# wav2vec2 = torchaudio.pipelines.WAV2VEC2_LARGE.get_model()
+wav2vec2 = torchaudio.pipelines.HUBERT_LARGE.get_model()
 wav2vec2 = wav2vec2.to(device)
 
 

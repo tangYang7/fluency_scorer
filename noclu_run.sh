@@ -16,11 +16,12 @@ lr=1e-3
 batch_size=32
 embed_dim=32
 num_epochs=50
-'''
-model: 
-fluScorerNoclu
-fluScorer
-'''
+
+model(){
+  fluScorerNoclu
+  fluScorer
+}
+
 model=fluScorerNoclu
 am=wav2vec2_large
 

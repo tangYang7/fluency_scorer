@@ -2,6 +2,8 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
 from sklearn.cluster import KMeans, MiniBatchKMeans
+import matplotlib.pyplot as plt
+from sklearn.metrics import davies_bouldin_score
 import warnings
 import pickle
 import os
@@ -63,39 +65,55 @@ class fluDataset(Dataset):
 batch_size = 1
 
 tr_dataset = fluDataset('train')
-tr_dataloader = DataLoader(tr_dataset, batch_size=batch_size, shuffle=False)
+tr_dataloader = DataLoader(tr_dataset, batch_size=batch_size, shuffle=True)
 te_dataset = fluDataset('test')
 te_dataloader = DataLoader(te_dataset, batch_size=batch_size, shuffle=False)
 
-max_iter, num_clusters, bs, n_init = 100, 50, 10000, 20
-warnings.simplefilter(action='ignore', category=FutureWarning)
-# cluster = KMeans(n_clusters=num_clusters)
-cluster = MiniBatchKMeans(n_clusters=num_clusters,
-                        max_iter=max_iter,
-                        batch_size=bs,
-                        n_init=n_init,
-                        )
+k_values = [
+            20, 23, 25, 28, 30, 
+            33, 35, 38, 40, 45, 
+            50, 70, 100
+            ]
+Davies_bouldin_score = {}
+DistanceList = {}
+for k in k_values:
+    print(f'Start k-means fit for k={k}...')
 
-extract_feat_tensor, saved_tensor_dict = load_feature(tr_dataloader, 'tr')
+    max_iter, num_clusters, bs, n_init = 100, k, 10000, 20
+    warnings.simplefilter(action='ignore', category=FutureWarning)
+    # cluster = KMeans(n_clusters=num_clusters)
+    cluster = MiniBatchKMeans(n_clusters=num_clusters,
+                            max_iter=max_iter,
+                            batch_size=bs,
+                            n_init=n_init,
+                            random_state=42
+                            )
 
-print('Start k-means fit...')
-cluster.fit(extract_feat_tensor.numpy())
-print('\033[1;34mMission Completed: cluster_fit X.\033[0m')
+    extract_feat_tensor, saved_tensor_dict = load_feature(tr_dataloader, 'tr')
 
-model_output_path = '../exp/kmeans'
-if not os.path.isdir(model_output_path):
-    os.mkdir(model_output_path)
-joblib.dump(cluster, f'{model_output_path}/kmeans_model.joblib')
+    print('Start k-means fit...')
+    cluster.fit(extract_feat_tensor.numpy())
+    extract_feat_tensor, saved_tensor_dict = load_feature(te_dataloader, 'te')
+    labels = cluster.predict(extract_feat_tensor.numpy())
+    print('\033[1;34mMission Completed: cluster_fit X.\033[0m')
 
-cluster_index_dict = {}
-for i in range(len(cluster.cluster_centers_)):
-    cluster_index_dict[i] = cluster.cluster_centers_[i]
-with open(f'../data/cluster_centers.pkl', 'wb') as file:
-    pickle.dump(cluster_index_dict, file)
-print("Saved KMeans model.")
+    Davies_bouldin_score[k] = davies_bouldin_score(extract_feat_tensor.numpy(), labels)
+    DistanceList[k] = (cluster.inertia_)
 
-print('Start k-means prediction...')
-cluster_pred(tr_dataloader, saved_tensor_dict, 'tr')
-extract_feat_tensor, saved_tensor_dict = load_feature(te_dataloader, 'te')
-cluster_pred(te_dataloader, saved_tensor_dict, 'te')
-print('\033[1;34mMission Completed: cluster prediction.\033[0m')
+# Plot the silhouette scores
+plt.figure(figsize=(10, 6))
+plt.plot(list(Davies_bouldin_score.keys()), list(Davies_bouldin_score.values()), marker='o')
+plt.title('Davies_bouldin_scores for Different Values of k')
+plt.xlabel('Number of Clusters (k)')
+plt.ylabel('Davies_bouldin_score')
+plt.grid(True)
+plt.savefig('kmeans.jpg')
+
+# Plot the DistanceList scores
+plt.figure(figsize=(10, 6))
+plt.plot(list(DistanceList.keys()), list(DistanceList.values()), marker='o')
+plt.title('DistanceList for Different Values of k')
+plt.xlabel('Number of Clusters (k)')
+plt.ylabel('Distance')
+plt.grid(True)
+plt.savefig('kmeans2.jpg')

@@ -54,14 +54,14 @@ class fluDataset(Dataset):
     
 def cluster_pred(dataLoader, saved_tensor_dict, dataset_type, fig_path):
     cluster_pred_list = []
-    # with open(f'{fig_path}/{dataset_type}_clust_index.txt', 'w') as file:
-    #     pass
+    with open(f'{fig_path}/{dataset_type}_clust_index.txt', 'w') as file:
+        pass
     for j, (paths, utt_label) in enumerate(dataLoader):
         for path in paths:
             feat_tensor = saved_tensor_dict[path]
             cluster_pred = cluster.predict(feat_tensor.numpy())
-            # with open(f'{fig_path}/{dataset_type}_clust_index.txt', 'a') as file:
-            #     pprint(cluster_pred, stream=file)
+            with open(f'{fig_path}/{dataset_type}_clust_index.txt', 'a') as file:
+                pprint(cluster_pred, stream=file)
             pred_tensor = torch.tensor(cluster_pred)
             cluster_pred_list.append(pred_tensor)
         if j == 2:
@@ -80,7 +80,6 @@ def draw_fig(X_tsne, y, dataset_type, fig_path):
     # 加入圖例
     legend1 = plt.legend(*scatter.legend_elements(), title="Digits",
                         bbox_to_anchor=(1.03, 0.8), loc='upper left', 
-                        edgecolors='k', s=50,
                         )
     plt.gca().add_artist(legend1)
     plt.savefig(f"{fig_path}/{dataset_type}_tsne.jpg")

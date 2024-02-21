@@ -14,7 +14,8 @@ The input generation program are in `prep_data` and you need to download SpeechO
 cd prep/data
 python3 gen_seq_data_utt.py
 python3 gen_seq_acoustic_feat.py
-python3 gen_seq_cluster.py
+python3 train_kmeans.py
+python3 kmeans_metric.py
 ```
 - The labels are utterance-level scores, which the **fluency score is `utt_label[: 2]`**.
 - The acoustic features are extracted by **Wav2vec_large**, where the dim is the value of 1024.
