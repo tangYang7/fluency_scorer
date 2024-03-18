@@ -1,6 +1,6 @@
 scikit-learn==1.4.0
 torch==1.11.0
-torchadio 
+torchaudio 
 numpy
 tqdm
 matplotlib
