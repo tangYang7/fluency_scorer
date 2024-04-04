@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-def mean_pooling(feature_tensor: torch.Tensor, padding_value: int = 0):
+def mean_pooling(feature_tensor: torch.Tensor, padding_value: float = 0.0):
     mask = feature_tensor != padding_value
     count = torch.sum(mask, axis=1)
     feature_tensor = torch.where(mask, feature_tensor, 0)
@@ -36,11 +36,10 @@ class BiLSTM(nn.Module):
         out, _ = self.blstm(x, (h0, c0))
         return out
     
-# adapt: tanh -> GELU    
+# adapt: tanh -> GELU
 class BiLSTMScorer(nn.Module):
     def __init__(self, input_size: int, hidden_size: int, num_layers: int = 2):
         '''
-        input_seq: the input length by default. \n
         BiLSTM(input_size, hidden_size, num_layers=num_layers)
         '''
         super().__init__()
@@ -64,10 +63,10 @@ class BiLSTMScorer(nn.Module):
             score = self.activations['GELU'](score)
         return score
 
-def _preprocessing(audio_embedding, preprocessing_model):
+def _preprocessing(audio_embedding, preprocessing_module):
     audio_embedding_list = []
     for i in range(audio_embedding.size(0)):
-        new_audio_embedding = preprocessing_model(audio_embedding[i])
+        new_audio_embedding = preprocessing_module(audio_embedding[i])
         audio_embedding_list.append(new_audio_embedding)
     new_audio_embedding_tensor = torch.stack(audio_embedding_list, dim=0)
     return new_audio_embedding_tensor
@@ -80,10 +79,12 @@ class FluencyScorerNoclu(nn.Module):
         super().__init__()
         self.preprocessing = nn.Sequential(
             nn.Linear(input_dim, input_dim),
-            nn.LayerNorm(input_dim),
-            nn.Tanh()
+            nn.Dropout(p=0.5),
+            # nn.Linear(input_dim, embed_dim),
+            nn.LayerNorm(embed_dim),
+            nn.Tanh(),
         )
-        self.scorer = BiLSTMScorer(input_dim, embed_dim, 2)
+        self.scorer = BiLSTMScorer(embed_dim+clustering_dim, embed_dim, 2)
 
     def forward(self, x):
         ''' 
@@ -110,7 +111,7 @@ class FluencyScorer(nn.Module):
         )
         self.scorer = BiLSTMScorer(input_dim+clustering_dim, embed_dim, 2)
 
-    def forward(self, x, cluster_x):
+    def forward(self, x, cluster_id):
         ''' 
         x: extract audio features
         return: a pred score
@@ -119,7 +120,7 @@ class FluencyScorer(nn.Module):
         new_audio_embedding_tensor = _preprocessing(x, self.preprocessing)
 
         # step 2: concat audio and cluster embedding
-        audio_features = torch.concat((new_audio_embedding_tensor, cluster_x), dim=2)
+        audio_features = torch.concat((new_audio_embedding_tensor, cluster_id), dim=2)
 
         # step 3: make a score
         pred = self.scorer(audio_features)

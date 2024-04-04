@@ -18,6 +18,7 @@ embed_dim=32
 num_epochs=50
 model=fluScorer
 am=wav2vec2_large
+cluster_pred=True
 
 model(){
   fluScorerNoclu
@@ -35,5 +36,5 @@ do
   mkdir -p $exp_dir-${repeat}
   python3 ./train.py --lr ${lr} --exp-dir ${exp_dir}-${repeat} \
   --batch_size ${batch_size} --embed_dim ${embed_dim} \
-  --model ${model} --am ${am} --n-epochs ${num_epochs}
+  --model ${model} --am ${am} --n-epochs ${num_epochs} --cluster_pred ${cluster_pred}
 done

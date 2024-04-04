@@ -15,6 +15,18 @@ from torch.nn.utils.rnn import pad_sequence
 from models import *
 import argparse
 
+class bcolors:
+    HEADER = '\033[95m'
+    YELLOW = '\033[93m'
+    BLUE = '\033[94m'
+    CYAN = '\033[96m'
+    GREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
 def set_arg(parser):
     parser.add_argument("--exp-dir", type=str, default="./exp/", help="directory to dump experiments")
     parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float, metavar='LR', help='initial learning rate')
@@ -24,7 +36,7 @@ def set_arg(parser):
     parser.add_argument("--loss_w_utt", type=float, default=1, help="weight for utterance-level loss")
     parser.add_argument("--model", type=str, default='fluScorer', help="name of the model")
     parser.add_argument("--am", type=str, default='wav2vec2.0', help="name of the acoustic models")
-    parser.add_argument("--noise", type=float, default=0., help="the scale of random noise added on the input GoP feature")
+    parser.add_argument("--cluster_pred", type=bool, default=True, help="cluster predict in training or not")
     return parser
 
 def convert_bin(input, num_binary=6):
@@ -40,7 +52,6 @@ def cluster_pred(feats, model):
     cluster_index_list = []
     for feat in feats:
         pred = model.predict(feat)
-        # pred = torch.tensor(pred)
         pred_bin = convert_bin(pred)
         cluster_index_list.append(pred_bin)
     cluster_index_tensor = torch.stack(cluster_index_list, dim=0)
@@ -65,10 +76,16 @@ def draw_train_fig(train_mse_values, val_mse_values, train_corr_values, val_corr
     plt.ylabel('Correlation')
     plt.legend()
 
+    # Annotate the PCC in the end
+    ylast, xlast = val_corr_values[-1], epochs_list[-1]
+    plt.text(xlast, ylast, f'{ylast:.3f}', ha='right', color='red', fontsize=10)
+
     plt.tight_layout()
     plt.savefig(f"{exp_dir}/train.jpg")
 
 def train(audio_model, train_loader, test_loader, args):
+    gpu_index = 0
+    torch.cuda.set_device(gpu_index)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print('running on ' + str(device))
 
@@ -81,8 +98,6 @@ def train(audio_model, train_loader, test_loader, args):
     global_step, epoch = 0, 0
     exp_dir = args.exp_dir
 
-    if not isinstance(audio_model, nn.DataParallel):
-        audio_model = nn.DataParallel(audio_model)
     audio_model = audio_model.to(device)
 
     if args.model == 'fluScorer':
@@ -106,7 +121,13 @@ def train(audio_model, train_loader, test_loader, args):
     
     while epoch < args.n_epochs:
         audio_model.train()
-        for _, (audio_paths, utt_label, feats) in enumerate(train_loader):
+        for _, data in enumerate(train_loader):
+            if len(data) == 3:
+                audio_paths, utt_label, feats = data
+            elif len(data) == 4:
+                audio_paths, utt_label, feats, indexs = data
+            else:
+                raise ValueError("Unexpected number of elements in data")
 
             # warmup
             warm_up_step = 100
@@ -115,17 +136,19 @@ def train(audio_model, train_loader, test_loader, args):
                 for param_group in optimizer.param_groups:
                     param_group['lr'] = warm_lr
                 print('warm-up learning rate is {:f}'.format(optimizer.param_groups[0]['lr']))
-
-            # add random noise for augmentation.
-            # noise = (torch.rand([audio.shape[1]]) - 1) * args.noise
-            # noise = noise.to(device, non_blocking=True)
-            # audio = audio + noise
                 
-            if args.model == 'fluScorer':
+            if args.model == 'fluScorer' and args.cluster_pred:
                 cluster_index = cluster_pred(feats, kmeans_model)
                 cluster_index = cluster_index.to(device)
-            feats = feats.to(device)
+            else:
+                cluster_index_list = []
+                for index in indexs:
+                    cluster_index = convert_bin(index, 6)
+                    cluster_index_list.append(cluster_index)
+                cluster_index_tensor = torch.stack(cluster_index_list, dim=0)
+                cluster_index = cluster_index_tensor.to(device)
 
+            feats = feats.to(device)
             if args.model == 'fluScorer':
                 pred = audio_model(feats, cluster_index)
             elif args.model == 'fluScorerNoclu':
@@ -154,7 +177,7 @@ def train(audio_model, train_loader, test_loader, args):
         epochs_list.append(epoch)
 
         print('Flency: Train MSE: {:.3f}, CORR: {:.3f}'.format(tr_mse.item(), tr_corr))
-        print('Flency: Test MSE: {:.3f}, CORR: {:.3f}'.format(te_mse.item(), te_corr))
+        print(f'Flency: Test MSE: {te_mse.item():.3f}, {bcolors.YELLOW}CORR: {te_corr:.3f}{bcolors.ENDC}')
 
         result[epoch, :6] = [epoch, tr_mse, tr_corr, te_mse, te_corr, optimizer.param_groups[0]['lr']]
         print('-------------------validation finished-------------------')
@@ -177,35 +200,46 @@ def train(audio_model, train_loader, test_loader, args):
     draw_train_fig(train_mse_values, val_mse_values, train_corr_values, val_corr_values, epochs_list, exp_dir)
 
 def validate(audio_model, val_loader, args, best_mse, kmeans_model=None):
+    gpu_index = 0
+    torch.cuda.set_device(gpu_index)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if not isinstance(audio_model, nn.DataParallel):
-        audio_model = nn.DataParallel(audio_model)
     audio_model = audio_model.to(device)
     audio_model.eval()
 
     A_flu, A_flu_target = [], []
     with torch.no_grad():
-        for _, (audio_paths, utt_label, feats) in enumerate(val_loader):
-            # compute output
-            if args.model == 'fluScorer':
+        for _, data in enumerate(val_loader):
+            if len(data) == 3:
+                audio_paths, utt_label, feats = data
+            elif len(data) == 4:
+                audio_paths, utt_label, feats, indexs = data
+            else:
+                raise ValueError("Unexpected number of elements in data")
+            
+            if args.model == 'fluScorer' and args.cluster_pred:
                 cluster_index = cluster_pred(feats, kmeans_model)
                 cluster_index = cluster_index.to(device)
-            feats = feats.to(device)
+            else:
+                cluster_index_list = []
+                for index in indexs:
+                    cluster_index = convert_bin(index, 6)
+                    cluster_index_list.append(cluster_index)
+                cluster_index_tensor = torch.stack(cluster_index_list, dim=0)
+                cluster_index = cluster_index_tensor.to(device)
 
+            feats = feats.to(device)
             if args.model == 'fluScorer':
                 flu_score = audio_model(feats, cluster_index)
             elif args.model == 'fluScorerNoclu':
                 flu_score = audio_model(feats)
-            flu_score = flu_score.to('cpu').detach()
             
+            flu_score = flu_score.to('cpu').detach()
             flu_label = torch.unsqueeze(torch.unsqueeze(utt_label[:, 2], 1), 1)
 
             A_flu.append(flu_score)
             A_flu_target.append(flu_label)
 
-
-        # phone level
-        A_flu, A_flu_target  = torch.cat(A_flu), torch.cat(A_flu_target)
+        A_flu, A_flu_target = torch.cat(A_flu), torch.cat(A_flu_target)
 
         # get the scores
         flu_mse, flu_corr = valid_flu(A_flu, A_flu_target)
@@ -232,7 +266,7 @@ def valid_flu(audio_output, target):
     # print(valid_token_target)
 
     valid_token_mse = np.mean((valid_token_pred - valid_token_target)**2)
-    corr_matrix = np.corrcoef(valid_token_pred,valid_token_target)
+    corr_matrix = np.corrcoef(valid_token_pred, valid_token_target)
     corr = corr_matrix[0, 1].item()
     return valid_token_mse, corr
 
@@ -253,7 +287,7 @@ def custom_collate_fn(batch):
     return paths, torch.stack(utt_labels), padded_feats
 
 class fluDataset(Dataset):
-    def __init__(self, set):
+    def __init__(self, set, load_cluster_index=None):
         paths = load_file(f'speechocean762/{set}/wav.scp')
         # audio_list = []
         for i in range(paths.shape[0]):
@@ -268,6 +302,10 @@ class fluDataset(Dataset):
 
         self.utt_label = torch.tensor(np.load(f'data/{dataset_type}_label_utt.npy'), dtype=torch.float)
         self.paths = paths
+        self.load_cluster_index = load_cluster_index
+        if load_cluster_index:
+            with open(f'data/{dataset_type}_indexs.pkl', 'rb') as file:
+                self.index = pickle.load(file)
 
         with open(f'data/{dataset_type}_feats.pkl', 'rb') as file:
             self.feats = pickle.load(file)
@@ -278,8 +316,12 @@ class fluDataset(Dataset):
         return self.utt_label.size(0)
 
     def __getitem__(self, idx):
-        # audio, utt_label, feat_x
-        return self.paths[idx], self.utt_label[idx, :], self.feats[self.paths[idx]]
+        if self.load_cluster_index:
+            # audio, utt_label, feat_x, cluster_id
+            return self.paths[idx], self.utt_label[idx, :], self.feats[self.paths[idx]], self.index[self.paths[idx]]
+        else:
+            # audio, utt_label, feat_x
+            return self.paths[idx], self.utt_label[idx, :], self.feats[self.paths[idx]]
 
 if __name__ == '__main__':
     sys.path.append(os.path.dirname(os.path.dirname(sys.path[0])))
@@ -305,10 +347,10 @@ if __name__ == '__main__':
         audio_model = FluencyScorerNoclu(input_dim=input_dim, embed_dim=args.embed_dim)
 
     print('Prepare datasets...')
-    tr_dataset = fluDataset('train')
+    tr_dataset = fluDataset('train', not args.cluster_pred)
     tr_dataloader = DataLoader(tr_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=custom_collate_fn)
     # tr_dataloader = DataLoader(tr_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=custom_collate_fn)
-    te_dataset = fluDataset('test')
+    te_dataset = fluDataset('test', not args.cluster_pred)
     te_dataloader = DataLoader(te_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=custom_collate_fn)
     print('Done.')
 
