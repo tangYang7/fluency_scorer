@@ -74,6 +74,9 @@ cluster = MiniBatchKMeans(n_clusters=num_clusters,
                         max_iter=max_iter,
                         batch_size=bs,
                         n_init=n_init,
+                        max_no_improvement=100,
+                        random_state=0,
+                        reassignment_ratio=0.0,
                         )
 
 extract_feat_tensor, saved_tensor_dict = load_feature(tr_dataloader, 'tr')
