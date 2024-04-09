@@ -19,23 +19,28 @@ You don't have to prepare SpeechOcean762 for yourself, but you need to run the c
 ## Directions for The Programs
 ### The Input Features and Labels
 The input generation program are in `prep_data`.
-- run the shell script in `prep_data`.
+- change directionary to `prep_data` and run python code.
 ```
-cd prep/data
+cd prep_data
 python3 gen_seq_data_utt.py
 python3 gen_seq_acoustic_feat.py
 python3 train_kmeans.py
 python3 kmeans_metric.py
 ```
+or, you can run the shell script in `prep_data`.
+```
+cd prep_data
+./run.sh
+```
 - The labels are utterance-level scores, which the **fluency score is `utt_label[: 2]`**.
 - The acoustic features are extracted by **Wav2vec_large**, where the dim is the value of 1024.
-- The cluster also can be prepare in `gen_seq_acoustic_feat.py`, but my program got killed somehow maybe out of memory, so I handle them in seperated programs. 
 - The feats and labels files are collected in `data`.
-
+- The cluster model is trained in `train_kmeans.py`, the model will be saved in `exp/kmeans`, which is used in fluency_scoring training later. 
+- `kmeans_metric.py` is used to take a look the performance of kmeans clustering.
 
 【**Noted**】: Force alignment result to replace the Kmeans predicted results
 
-You can run the following programming if you want to try the Force alignment results for the replacement of cluster ID.
+You can run the following programming if you want to try the Force alignment results for the replacement of cluster ID. 
 ```
 python3 gen_ctc_force_align.py
 ```
