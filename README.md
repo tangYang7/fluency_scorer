@@ -52,7 +52,7 @@ If you choose this for the resource of cluster ID, you need to update the `run.s
 
 | Models             | Utt FLU PCC |
 |--------------------|:------------:|
-| FluScorer+cluster_idx |     0.753    |
-| Flu_TFR+cluster_idx   |     0.753    |
 | GOPT (Librispeech)    |     0.756    |
 | Proposed paper        |   **0.795**  |
+| FluScorer+cluster_idx |     0.753    |
+| Flu_TFR+cluster_idx   |     0.790    |
