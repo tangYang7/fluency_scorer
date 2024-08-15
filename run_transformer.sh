@@ -24,8 +24,8 @@ model(){
 exp_dir=exp/${tag}/${lr}-${depth}-${batch_size}-${hidden_dim}-${model}/br
 
 # repeat times
-# repeat_list=(0 1 2 3 4)
-repeat_list=(0)
+repeat_list=(0 1 2 3 4)
+# repeat_list=(0)
 
 for repeat in "${repeat_list[@]}"
 do
