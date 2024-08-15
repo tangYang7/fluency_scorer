@@ -14,7 +14,7 @@ Here shows the main structure for this repo:
 
 ## Data
 The SpeechOcean762 dataset used in my work is an open dataset licenced with CC BY 4.0. 
-Id You have downloaded SpeechOcean762 for yourself, you can fill in your directory path to `prep_data/run.sh`.
+If You have downloaded speechocean762 for yourself, you can fill in your directory path to `prep_data/run.sh`.
 
 ## Directions for The Programs
 ### The Input Features and Labels
