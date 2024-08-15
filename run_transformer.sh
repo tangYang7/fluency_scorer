@@ -13,8 +13,8 @@ num_heads=1
 SO762_dir=
 load_cluster_index=True
 
-tag=SSL_feat_fluScore
-model=fluScorer
+tag=SSL_feat_fluTFR
+model=flu_TFR
 model(){
   fluScorerNoclu
   fluScorer

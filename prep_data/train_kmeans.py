@@ -7,14 +7,22 @@ import pickle
 import os
 import joblib
 
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("SO762_dir", type=str, default='../speechocean762')
+parser.add_argument("--feat_dir", type=str, default='../data')
+parser.add_argument("--output_dir", type=str, default='../exp/kmeans')
+args = parser.parse_args()
+
 def load_feature(dataLoader, dataset_type):
     extract_feat_list = []
-    file_path = f'../data/{dataset_type}_feats.pkl'
+    file_path = f'{args.feat_dir}/{dataset_type}_feats.pkl'
 
     with open(file_path, 'rb') as file:
         saved_tensor_dict = pickle.load(file)
 
-    for j, (paths, utt_label) in enumerate(dataLoader):
+    for j, (paths, _) in enumerate(dataLoader):
         for path in paths:
             feats = saved_tensor_dict[path]
             extract_feat_list.append(feats.cpu())
@@ -25,7 +33,7 @@ def load_feature(dataLoader, dataset_type):
 
 def cluster_pred(dataLoader, saved_tensor_dict, dataset_type):
     cluster_pred_dict = {}
-    for j, (paths, utt_label) in enumerate(dataLoader):
+    for j, (paths, _) in enumerate(dataLoader):
         for path in paths:
             feat_tensor = saved_tensor_dict[path]
             # print(feat_tensor.shape)
@@ -35,7 +43,7 @@ def cluster_pred(dataLoader, saved_tensor_dict, dataset_type):
             if path not in cluster_pred_dict:
                 cluster_pred_dict[path] = cluster_pred_tensor
 
-    with open(f'../data/{dataset_type}_cluster_index.pkl', 'wb') as file:
+    with open(f'{args.feat_dir}/{dataset_type}_cluster_index.pkl', 'wb') as file:
         pickle.dump(cluster_pred_dict, file)
 
 def load_file(path):
@@ -44,13 +52,13 @@ def load_file(path):
 
 class fluDataset(Dataset):
     def __init__(self, set):
-        paths = load_file(f'../speechocean762/{set}/wav.scp')
+        paths = load_file(f'{args.SO762_dir}/{set}/wav.scp')
         for i in range(paths.shape[0]):
             paths[i] = paths[i].split('\t')[1]
         if set == 'train':
-            self.utt_label = torch.tensor(np.load('../data/tr_label_utt.npy'), dtype=torch.float)
+            self.utt_label = torch.tensor(np.load(f'{args.feat_dir}/tr_label_utt.npy'), dtype=torch.float)
         elif set == 'test':
-            self.utt_label = torch.tensor(np.load('../data/te_label_utt.npy'), dtype=torch.float)
+            self.utt_label = torch.tensor(np.load(f'{args.feat_dir}/te_label_utt.npy'), dtype=torch.float)
         self.paths = paths
 
     def __len__(self):
@@ -69,7 +77,7 @@ te_dataloader = DataLoader(te_dataset, batch_size=batch_size, shuffle=False)
 
 max_iter, num_clusters, bs, n_init = 100, 50, 10000, 20
 warnings.simplefilter(action='ignore', category=FutureWarning)
-# cluster = KMeans(n_clusters=num_clusters)
+
 cluster = MiniBatchKMeans(n_clusters=num_clusters,
                         max_iter=max_iter,
                         batch_size=bs,
@@ -85,7 +93,7 @@ print('Start k-means fit...')
 cluster.fit(extract_feat_tensor.numpy())
 print('\033[1;34mMission Completed: cluster_fit X.\033[0m')
 
-model_output_path = '../exp/kmeans'
+model_output_path = args.output_dir
 if not os.path.isdir(model_output_path):
     os.mkdir(model_output_path)
 joblib.dump(cluster, f'{model_output_path}/kmeans_model.joblib')
@@ -93,7 +101,7 @@ joblib.dump(cluster, f'{model_output_path}/kmeans_model.joblib')
 cluster_index_dict = {}
 for i in range(len(cluster.cluster_centers_)):
     cluster_index_dict[i] = cluster.cluster_centers_[i]
-with open(f'../data/cluster_centers.pkl', 'wb') as file:
+with open(f'{args.feat_dir}/cluster_centers.pkl', 'wb') as file:
     pickle.dump(cluster_index_dict, file)
 print("Saved KMeans model.")
 

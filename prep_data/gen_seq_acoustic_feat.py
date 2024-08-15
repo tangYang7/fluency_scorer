@@ -5,19 +5,27 @@ import numpy as np
 from tqdm import tqdm
 import pickle
 
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("SO762_dir", type=str, default='../speechocean762')
+parser.add_argument("--feat_dir", type=str, default='../data')
+args = parser.parse_args()
+
+
 def load_file(path):
     file = np.loadtxt(path, delimiter=',', dtype=str)
     return file
 
 class fluDataset(Dataset):
     def __init__(self, types):
-        paths = load_file(f'../speechocean762/{types}/wav.scp')
+        paths = load_file(f'{args.SO762_dir}/{types}/wav.scp')
         for i in range(paths.shape[0]):
             paths[i] = paths[i].split('\t')[1]
         if types == 'train':
-            self.utt_label = torch.tensor(np.load('../data/tr_label_utt.npy'), dtype=torch.float)
+            self.utt_label = torch.tensor(np.load(f'{args.feat_dir}/tr_label_utt.npy'), dtype=torch.float)
         elif types == 'test':
-            self.utt_label = torch.tensor(np.load('../data/te_label_utt.npy'), dtype=torch.float)
+            self.utt_label = torch.tensor(np.load(f'{args.feat_dir}/te_label_utt.npy'), dtype=torch.float)
         self.paths = paths
 
     def __len__(self):
@@ -43,11 +51,11 @@ wav2vec2 = wav2vec2.to(device)
 def extract_feature(dataLoader, dataset_type):
     extract_feat_list = []
 
-    for j, (paths, utt_label) in tqdm(enumerate(dataLoader), total=len(dataLoader)):
+    for j, (paths, _) in tqdm(enumerate(dataLoader), total=len(dataLoader)):
         # load waveform
         audio_list = []
         for path in paths:
-            waveform, sample_rate = torchaudio.load(f"../speechocean762/{path}")
+            waveform, sample_rate = torchaudio.load(f"{args.SO762_dir}/{path}")
             audio_list.append(waveform)
 
         max_length = max(waveform.size(1) for waveform in audio_list)
@@ -70,12 +78,12 @@ def extract_feature(dataLoader, dataset_type):
     print('====================')
 
     saved_tensor_dict = {}
-    for j, (paths, utt_label) in enumerate(dataLoader):
+    for j, (paths, _) in enumerate(dataLoader):
         for path in paths:
             if path not in saved_tensor_dict:
                 saved_tensor_dict[path] = extract_feat_list[j][0]
 
-    with open(f'../data/{dataset_type}_feats.pkl', 'wb') as file:
+    with open(f'{args.feat_dir}/{dataset_type}_feats.pkl', 'wb') as file:
         pickle.dump(saved_tensor_dict, file)
 
     extract_feat_tensor = torch.cat(extract_feat_list, dim=1)  # cat all frames in 1024 dim

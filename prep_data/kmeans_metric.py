@@ -5,9 +5,17 @@ import pickle
 import joblib
 from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score
 
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("SO762_dir", type=str, default='../speechocean762')
+parser.add_argument("--feat_dir", type=str, default='../data')
+parser.add_argument("--output_dir", type=str, default='../exp/kmeans')
+args = parser.parse_args()
+
 def load_feature(dataLoader, dataset_type):
     extract_feat_list = []
-    file_path = f'../data/{dataset_type}_feats.pkl'
+    file_path = f'{args.feat_dir}/{dataset_type}_feats.pkl'
 
     with open(file_path, 'rb') as file:
         saved_tensor_dict = pickle.load(file)
@@ -33,7 +41,7 @@ def cluster_pred(dataLoader, saved_tensor_dict, dataset_type):
             if path not in cluster_pred_dict:
                 cluster_pred_dict[path] = cluster_pred_tensor
 
-    with open(f'../data/{dataset_type}_cluster_index.pkl', 'wb') as file:
+    with open(f'{args.feat_dir}/{dataset_type}_cluster_index.pkl', 'wb') as file:
         pickle.dump(cluster_pred_dict, file)
     if dataset_type == 'te':
         return 
@@ -42,23 +50,15 @@ def load_file(path):
     file = np.loadtxt(path, delimiter=',', dtype=str)
     return file
 
-def convert_bin(input):
-    # Convert each number to its binary representation
-    binary_representations = [list(map(int, bin(num)[2:].zfill(6))) for num in input]
-    
-    # Convert to a PyTorch tensor
-    tensor_2d = torch.tensor(binary_representations)
-    return tensor_2d
-
 class fluDataset(Dataset):
     def __init__(self, set):
-        paths = load_file(f'../speechocean762/{set}/wav.scp')
+        paths = load_file(f'{args.SO762_dir}/{set}/wav.scp')
         for i in range(paths.shape[0]):
             paths[i] = paths[i].split('\t')[1]
         if set == 'train':
-            self.utt_label = torch.tensor(np.load('../data/tr_label_utt.npy'), dtype=torch.float)
+            self.utt_label = torch.tensor(np.load(f'{args.feat_dir}/tr_label_utt.npy'), dtype=torch.float)
         elif set == 'test':
-            self.utt_label = torch.tensor(np.load('../data/te_label_utt.npy'), dtype=torch.float)
+            self.utt_label = torch.tensor(np.load(f'{args.feat_dir}/te_label_utt.npy'), dtype=torch.float)
         self.paths = paths
 
     def __len__(self):
@@ -75,7 +75,7 @@ tr_dataloader = DataLoader(tr_dataset, batch_size=batch_size, shuffle=False)
 te_dataset = fluDataset('test')
 te_dataloader = DataLoader(te_dataset, batch_size=batch_size, shuffle=False)
 
-model_path = '../exp/kmeans'
+model_path = args.output_dir
 cluster = joblib.load(f'{model_path}/kmeans_model.joblib')
 
 

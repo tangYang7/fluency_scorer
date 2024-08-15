@@ -32,11 +32,15 @@ def set_arg(parser):
     parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float, metavar='LR', help='initial learning rate')
     parser.add_argument("--n-epochs", type=int, default=100, help="number of maximum training epochs")
     parser.add_argument("--batch_size", type=int, default=32, help="training batch size")
-    parser.add_argument("--embed_dim", type=int, default=12, help="input feature embedding dimension")
-    parser.add_argument("--loss_w_utt", type=float, default=1, help="weight for utterance-level loss")
+    parser.add_argument("--hidden_dim", type=int, default=256, help="training hidden dimension")
     parser.add_argument("--model", type=str, default='fluScorer', help="name of the model")
-    parser.add_argument("--am", type=str, default='wav2vec2.0', help="name of the acoustic models")
-    parser.add_argument("--cluster_pred", type=bool, default=True, help="cluster predict in training or not")
+    parser.add_argument("--use_device", type=str, default='cpu', help="device to use")
+    parser.add_argument("--gpu_index", type=int, default=0, help="GPU index")
+    parser.add_argument("--num_heads", type=int, default=4, help="number of heads in transformer")
+    parser.add_argument("--depth", type=int, default=3, help="number of layers in transformer")
+    parser.add_argument("--dropout_prob", type=float, default=0.1, help="dropout probability")
+    parser.add_argument("--SO762_dir", type=str, default='speechocean762', help="directory of speechocean762")
+    parser.add_argument("--load_cluster_index", type=bool, default=False, help="load cluster index")
     return parser
 
 def convert_bin(input, num_binary=6):
@@ -100,7 +104,7 @@ def train(audio_model, train_loader, test_loader, args):
 
     audio_model = audio_model.to(device)
 
-    if args.model == 'fluScorer':
+    if args.model == 'fluScorer' or args.model == 'flu_TFR':
         kmeans_model = joblib.load(f'exp/kmeans/kmeans_model.joblib')
     else:
         kmeans_model = None
@@ -137,7 +141,7 @@ def train(audio_model, train_loader, test_loader, args):
                     param_group['lr'] = warm_lr
                 print('warm-up learning rate is {:f}'.format(optimizer.param_groups[0]['lr']))
                 
-            if args.model == 'fluScorer' and args.cluster_pred:
+            if (args.model == 'fluScorer' or args.model == 'flu_TFR') and args.load_cluster_index:
                 cluster_index = cluster_pred(feats, kmeans_model)
                 cluster_index = cluster_index.to(device)
             else:
@@ -149,7 +153,7 @@ def train(audio_model, train_loader, test_loader, args):
                 cluster_index = cluster_index_tensor.to(device)
 
             feats = feats.to(device)
-            if args.model == 'fluScorer':
+            if args.model == 'fluScorer' or args.model == 'flu_TFR':
                 pred = audio_model(feats, cluster_index)
             elif args.model == 'fluScorerNoclu':
                 pred = audio_model(feats)
@@ -216,7 +220,7 @@ def validate(audio_model, val_loader, args, best_mse, kmeans_model=None):
             else:
                 raise ValueError("Unexpected number of elements in data")
             
-            if args.model == 'fluScorer' and args.cluster_pred:
+            if (args.model == 'fluScorer' or args.model == 'flu_TFR') and args.load_cluster_index:
                 cluster_index = cluster_pred(feats, kmeans_model)
                 cluster_index = cluster_index.to(device)
             else:
@@ -228,7 +232,7 @@ def validate(audio_model, val_loader, args, best_mse, kmeans_model=None):
                 cluster_index = cluster_index_tensor.to(device)
 
             feats = feats.to(device)
-            if args.model == 'fluScorer':
+            if args.model == 'fluScorer' or args.model == 'flu_TFR':
                 flu_score = audio_model(feats, cluster_index)
             elif args.model == 'fluScorerNoclu':
                 flu_score = audio_model(feats)
@@ -287,8 +291,8 @@ def custom_collate_fn(batch):
     return paths, torch.stack(utt_labels), padded_feats
 
 class fluDataset(Dataset):
-    def __init__(self, set, load_cluster_index=None):
-        paths = load_file(f'speechocean762/{set}/wav.scp')
+    def __init__(self, set, so762_dir, load_cluster_index=None):
+        paths = load_file(f'{so762_dir}/{set}/wav.scp')
         # audio_list = []
         for i in range(paths.shape[0]):
             paths[i] = paths[i].split('\t')[1]
@@ -331,27 +335,27 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if os.path.exists(args.exp_dir) == False:
         os.mkdir(args.exp_dir)
-    am = args.am
-    print('now train with {:s} acoustic models'.format(am))
-    feat_dim = {
-                'wav2vec2_base':768,
-                'wav2vec2_large':1024, 
-    }
-    input_dim=feat_dim[am]
+
+    print('Prepare datasets...')
+    tr_dataset = fluDataset('train', args.SO762_dir, not args.load_cluster_index)
+    tr_dataloader = DataLoader(tr_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=custom_collate_fn)
+    # tr_dataloader = DataLoader(tr_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=custom_collate_fn)
+    te_dataset = fluDataset('test', args.SO762_dir, not args.load_cluster_index)
+    te_dataloader = DataLoader(te_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=custom_collate_fn)
+    print('Done.')
+
+    input_dim = tr_dataset.feats[next(iter(tr_dataset.feats))].shape[1]
+
 
     if args.model == 'fluScorer':
         print('now train a fluScorer models')
-        audio_model = FluencyScorer(input_dim=input_dim, embed_dim=args.embed_dim, clustering_dim=6)
+        audio_model = FluencyScorer(input_dim=input_dim, embed_dim=args.hidden_dim, clustering_dim=6)
     elif args.model == 'fluScorerNoclu':
         print('now train a fluScorer models <<no cluster>>')
-        audio_model = FluencyScorerNoclu(input_dim=input_dim, embed_dim=args.embed_dim)
-
-    print('Prepare datasets...')
-    tr_dataset = fluDataset('train', not args.cluster_pred)
-    tr_dataloader = DataLoader(tr_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=custom_collate_fn)
-    # tr_dataloader = DataLoader(tr_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=custom_collate_fn)
-    te_dataset = fluDataset('test', not args.cluster_pred)
-    te_dataloader = DataLoader(te_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=custom_collate_fn)
-    print('Done.')
+        audio_model = FluencyScorerNoclu(input_dim=input_dim, embed_dim=args.hidden_dim)
+    elif args.model == 'flu_TFR':
+        print('Train model: Flu_TFR')
+        audio_model = Flu_TFR(input_dim=input_dim,
+                                dropout_prob=args.dropout_prob, num_heads=args.num_heads, depth=args.depth)
 
     train(audio_model, tr_dataloader, te_dataloader, args)

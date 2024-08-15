@@ -37,29 +37,35 @@ def process_feat_seq_utt(paths, utt2score):
 
     return seq_label
 
-# utt label dict
-with open('scores.json') as f:
-    utt2score = json.loads(f.read())
+if __name__ == "__main__":
+    import argparse
 
-dataset_path = '../speechocean762'
-if not os.path.exists(dataset_path):
-    # change to the directory where you want to save the dataset
-    os.chdir('../')
-    # download the dataset
-    os.system('wget https://www.openslr.org/resources/101/speechocean762.tar.gz')
-    os.system('tar -xvzf speechocean762.tar.gz')
-    os.chdir('prep_data')
+    parser = argparse.ArgumentParser()
+    parser.add_argument("SO762_dir", type=str, default='../speechocean762')
+    parser.add_argument("score_json", type=str, default='scores.json')
+    parser.add_argument("--output_dir", type=str, default='../data')
+    args = parser.parse_args()
 
-# sequencialize training data
-tr_paths = load_file(f'{dataset_path}/train/wav.scp')
-tr_label = process_feat_seq_utt(tr_paths, utt2score)
-print(tr_label.shape)
-os.makedirs("../data", exist_ok=True)
-np.save('../data/tr_label_utt.npy', tr_label)
+    # utt label dict
+    with open(args.score_json) as f:
+        utt2score = json.loads(f.read())
 
+    dataset_path = args.SO762_dir
+    output_dir = args.output_dir
+    if not os.path.exists(dataset_path):
+        # download the dataset in dataset_path
+        os.system('wget https://www.openslr.org/resources/101/speechocean762.tar.gz')
+        os.system(f'tar -xvzf speechocean762.tar.gz -C {dataset_path}')        
+        
+    # sequencialize training data
+    tr_paths = load_file(f'{dataset_path}/train/wav.scp')
+    tr_label = process_feat_seq_utt(tr_paths, utt2score)
+    print(tr_label.shape)
+    os.makedirs(output_dir, exist_ok=True)
+    np.save(f'{output_dir}/tr_label_utt.npy', tr_label)
 
-te_paths = load_file(f'{dataset_path}/test/wav.scp')
-te_label = process_feat_seq_utt(te_paths, utt2score)
-print(te_label.shape)
-os.makedirs("../data", exist_ok=True)
-np.save('../data/te_label_utt.npy', te_label)
+    te_paths = load_file(f'{dataset_path}/test/wav.scp')
+    te_label = process_feat_seq_utt(te_paths, utt2score)
+    print(te_label.shape)
+    os.makedirs("../data", exist_ok=True)
+    np.save(f'{output_dir}/te_label_utt.npy', te_label)

@@ -5,7 +5,6 @@ import torch
 import torchaudio
 from transformers import Wav2Vec2Model, HubertModel
 from torch.utils.data import Dataset, DataLoader
-import soundfile as sf
 import numpy as np
 from tqdm import tqdm
 import pickle
@@ -53,16 +52,15 @@ class fluDataset(Dataset):
         return self.paths[idx], self.texts[idx]
 
 
-def get_align_index(dataLoader, dataset_type):
+def get_align_index(dataLoader, dataset_type, device, SO762_dir, feat_dir):
     extract_feat_list = []
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     bundle = torchaudio.pipelines.WAV2VEC2_ASR_BASE_960H
     labels = bundle.get_labels()
     for i, (audio_paths, texts) in tqdm(enumerate(dataLoader), total=len(dataLoader)):
         # load waveform
         audio_list = []
         for audio_path in audio_paths:
-            waveform, sample_rate = torchaudio.load(f"../speechocean762/{audio_path}")
+            waveform, sample_rate = torchaudio.load(f"{SO762_dir}/{audio_path}")
             audio_list.append(waveform.clone().detach().float())
 
         audio = torch.stack(audio_list, dim=0)
@@ -104,15 +102,15 @@ def get_align_index(dataLoader, dataset_type):
                 saved_tensor_dict[path] = extract_feat_list[j]
                 # print(saved_tensor_dict[path])
 
-    with open(f'../data/{dataset_type}_indexs.pkl', 'wb') as file:
+    with open(f'{feat_dir}/{dataset_type}_indexs.pkl', 'wb') as file:
         pickle.dump(saved_tensor_dict, file)
 
     return 
 
 def main(
-    modelName,
     gpu,
-    SSL_model,
+    SO762_dir,
+    feat_dir,
 ):
     if gpu:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -125,8 +123,8 @@ def main(
     tr_dataloader = DataLoader(tr_dataset, batch_size=batch_size, shuffle=False)
     te_dataloader = DataLoader(te_dataset, batch_size=batch_size, shuffle=False)
 
-    get_align_index(tr_dataloader, 'tr')
-    get_align_index(te_dataloader, 'te')
+    get_align_index(tr_dataloader, 'tr', device, SO762_dir, feat_dir)
+    get_align_index(te_dataloader, 'te', device, SO762_dir, feat_dir)
 
     logger.info(f"{bcolors.YELLOW}finished successfully{bcolors.ENDC}")
     return 
@@ -134,15 +132,11 @@ def main(
 if __name__ == "__main__":
     import argparse
 
-    modelName = f"facebook/wav2vec2-large-lv60"
-    # modelName = f"facebook/hubert-large-ls960-ft"
-
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--modelName", default=modelName, type=str, help="the pretrained model name"
-    )
     parser.add_argument("--gpu", default=True, type=bool, help="use gpu or not")
-    parser.add_argument("--SSL_model", default="wav2vec2", type=str, help="Now only support wav2vec2")
+    parser.add_argument("SO762_dir", type=str, default='../speechocean762')
+    parser.add_argument("--feat_dir", type=str, default='../data')
+
     args = parser.parse_args()
     logging.info(str(args))
 

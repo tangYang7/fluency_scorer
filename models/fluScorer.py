@@ -78,13 +78,11 @@ class FluencyScorerNoclu(nn.Module):
     def __init__(self, input_dim: int, embed_dim: int):
         super().__init__()
         self.preprocessing = nn.Sequential(
-            nn.Linear(input_dim, input_dim),
-            nn.Dropout(p=0.5),
-            # nn.Linear(input_dim, embed_dim),
+            nn.Linear(input_dim, embed_dim),
             nn.LayerNorm(embed_dim),
             nn.Tanh(),
         )
-        self.scorer = BiLSTMScorer(embed_dim+clustering_dim, embed_dim, 2)
+        self.scorer = BiLSTMScorer(embed_dim, embed_dim, 2)
 
     def forward(self, x):
         ''' 
@@ -105,11 +103,11 @@ class FluencyScorer(nn.Module):
     def __init__(self, input_dim, embed_dim, clustering_dim=6):
         super().__init__()
         self.preprocessing = nn.Sequential(
-            nn.Linear(input_dim, input_dim),
-            nn.LayerNorm(input_dim),
-            nn.Tanh()
+            nn.Linear(input_dim, embed_dim),
+            nn.LayerNorm(embed_dim),
+            nn.Tanh(),
         )
-        self.scorer = BiLSTMScorer(input_dim+clustering_dim, embed_dim, 2)
+        self.scorer = BiLSTMScorer(embed_dim+clustering_dim, embed_dim, 2)
 
     def forward(self, x, cluster_id):
         ''' 
