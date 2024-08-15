@@ -14,25 +14,17 @@ Here shows the main structure for this repo:
 
 ## Data
 The SpeechOcean762 dataset used in my work is an open dataset licenced with CC BY 4.0. 
-You don't have to prepare SpeechOcean762 for yourself, but you need to run the code in `prep_data` first.
+Id You have downloaded SpeechOcean762 for yourself, you can fill in your directory path to `prep_data/run.sh`.
 
 ## Directions for The Programs
 ### The Input Features and Labels
 The input generation program are in `prep_data`.
-- change directionary to `prep_data` and run python code.
-```
-cd prep_data
-python3 gen_seq_data_utt.py
-python3 gen_seq_acoustic_feat.py
-python3 train_kmeans.py
-python3 kmeans_metric.py
-```
-or, you can run the shell script in `prep_data`.
+Just run the shell script in `prep_data`.
 ```
 cd prep_data
 ./run.sh
 ```
-- The labels are utterance-level scores, which the **fluency score is `utt_label[: 2]`**.
+- The labels are fluency scores in speechocean762.
 - The acoustic features are extracted by **Wav2vec_large**, where the dim is the value of 1024.
 - The feats and labels files are collected in `data`.
 - The cluster model is trained in `train_kmeans.py`, the model will be saved in `exp/kmeans`, which is used in fluency_scoring training later. 
@@ -58,17 +50,9 @@ If you choose this for the resource of cluster ID, you need to update the `run.s
 
 ## Results And Performance
 
-|                    | Utt Pros PCC |
+| Models             | Utt FLU PCC |
 |--------------------|:------------:|
-| Wav2vec_feat              |     0.413    |
-| Wav2vec_feat+cluster_idx  |     0.471    |
-| GOPT (Librispeech)        |     0.756    |
-| Proposed paper            |   **0.795**  |
-
-### How to explain the results?
-- **The model is a pretrained model?**
-
-  In the proposed paper by ByteDance, the fluency scorer model might be a pretrained model from ByteRead or ByteQA, then fine-tuned on Speechocean762. This results in a performance gap, as ByteRead and ByteQA offer more abundant corpora for training compared to Speechocean762.
-- **Unresolved issues**
-
-  There are some unresolved issues that fail to demonstrate the effect of masking in BiLSTM, for instance. This requires further investigation and experimentation for confirmation.
+| FluScorer+cluster_idx |     0.753    |
+| Flu_TFR+cluster_idx   |     0.753    |
+| GOPT (Librispeech)    |     0.756    |
+| Proposed paper        |   **0.795**  |
