@@ -19,10 +19,11 @@ class Flu_TFR(nn.Module):
         self.input_dim = input_dim
         self.dropout_prob = dropout_prob
         self.hidden_dim = 32
-        self.projLayer = nn.Linear(input_dim+clustering_dim, self.hidden_dim)
+        self.projLayer = nn.Linear(input_dim, self.hidden_dim)
 
-        self.encoder_layer = nn.TransformerEncoderLayer(d_model=self.hidden_dim, nhead=num_heads, 
-                                                        dim_feedforward=self.hidden_dim*4, dropout=dropout_prob, 
+        self.encoder_layer = nn.TransformerEncoderLayer(d_model=self.hidden_dim+clustering_dim, nhead=num_heads, 
+                                                        dim_feedforward=(self.hidden_dim+clustering_dim)*4, 
+                                                        dropout=dropout_prob, 
                                                         activation=activation, batch_first=True,
                                                         norm_first=norm_first,
                             )
@@ -31,8 +32,8 @@ class Flu_TFR(nn.Module):
         self.mlp_head_utt1 = nn.Sequential(nn.LayerNorm(self.hidden_dim), nn.Linear(self.hidden_dim, 1))
 
     def forward(self, x, cluster_idx):
-        x = torch.cat([x, cluster_idx], dim=2)
         x = self.projLayer(x)
+        x = torch.cat([x, cluster_idx], dim=2)
         mask = self.create_mask(x)
         x = self.transformer_encoder(x, src_key_padding_mask=mask)
         x = self.mean_pooling(x, padding_value=0.0)

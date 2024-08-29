@@ -10,7 +10,9 @@ import numpy as np
 from tqdm import tqdm
 import pickle
 import joblib
-from torch.nn.utils.rnn import pad_sequence
+from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence
+import random
+import torch
 
 from models import *
 import argparse
@@ -41,6 +43,8 @@ def set_arg(parser):
     parser.add_argument("--dropout_prob", type=float, default=0.1, help="dropout probability")
     parser.add_argument("--SO762_dir", type=str, default='speechocean762', help="directory of speechocean762")
     parser.add_argument("--load_cluster_index", type=bool, default=False, help="load cluster index")
+    parser.add_argument("--seed", type=int, default=66)
+    parser.add_argument("--aspect", type=str, default='flu')
     return parser
 
 def convert_bin(input, num_binary=6):
@@ -86,6 +90,16 @@ def draw_train_fig(train_mse_values, val_mse_values, train_corr_values, val_corr
 
     plt.tight_layout()
     plt.savefig(f"{exp_dir}/train.jpg")
+
+def gen_result_header():
+    utt_header_set = ['utt_train_mse', 'utt_train_pcc', 'utt_test_mse', 'utt_test_pcc']
+    utt_header_score = ['fluency']
+    utt_header = []
+    for dset in utt_header_set:
+        utt_header = utt_header + [dset+'_'+x for x in utt_header_score]
+
+    header = ['epoch', 'learning_rate'] + utt_header
+    return header
 
 def train(audio_model, train_loader, test_loader, args):
     gpu_index = 0
@@ -140,7 +154,10 @@ def train(audio_model, train_loader, test_loader, args):
                 for param_group in optimizer.param_groups:
                     param_group['lr'] = warm_lr
                 print('warm-up learning rate is {:f}'.format(optimizer.param_groups[0]['lr']))
-                
+
+            cluster_index = indexs + 1
+            cluster_index = cluster_index.to(device)
+            """
             if (args.model == 'fluScorer' or args.model == 'flu_TFR') and args.load_cluster_index:
                 cluster_index = cluster_pred(feats, kmeans_model)
                 cluster_index = cluster_index.to(device)
@@ -151,6 +168,7 @@ def train(audio_model, train_loader, test_loader, args):
                     cluster_index_list.append(cluster_index)
                 cluster_index_tensor = torch.stack(cluster_index_list, dim=0)
                 cluster_index = cluster_index_tensor.to(device)
+            """  
 
             feats = feats.to(device)
             if args.model == 'fluScorer' or args.model == 'flu_TFR':
@@ -158,7 +176,7 @@ def train(audio_model, train_loader, test_loader, args):
             elif args.model == 'fluScorerNoclu':
                 pred = audio_model(feats)
 
-            flu_label = torch.unsqueeze(utt_label[:, 2], 1)
+            flu_label = torch.unsqueeze(utt_label[:, args.aspect_idx], 1)
             flu_label = flu_label.to(device, non_blocking=True)
             loss = loss_fn(pred, flu_label)
 
@@ -180,10 +198,10 @@ def train(audio_model, train_loader, test_loader, args):
         val_corr_values.append(te_corr)
         epochs_list.append(epoch)
 
-        print('Flency: Train MSE: {:.3f}, CORR: {:.3f}'.format(tr_mse.item(), tr_corr))
-        print(f'Flency: Test MSE: {te_mse.item():.3f}, {bcolors.YELLOW}CORR: {te_corr:.3f}{bcolors.ENDC}')
+        print('Fluency: Train MSE: {:.3f}, CORR: {:.3f}'.format(tr_mse.item(), tr_corr))
+        print(f'Fluency: Test MSE: {te_mse.item():.3f}, {bcolors.YELLOW}CORR: {te_corr:.3f}{bcolors.ENDC}')
 
-        result[epoch, :6] = [epoch, tr_mse, tr_corr, te_mse, te_corr, optimizer.param_groups[0]['lr']]
+        result[epoch, :6] = [epoch, optimizer.param_groups[0]['lr'], tr_mse, tr_corr, te_mse, te_corr]
         print('-------------------validation finished-------------------')
 
         if te_mse < best_mse:
@@ -202,6 +220,8 @@ def train(audio_model, train_loader, test_loader, args):
         epoch += 1
 
     draw_train_fig(train_mse_values, val_mse_values, train_corr_values, val_corr_values, epochs_list, exp_dir)
+    header = ','.join(gen_result_header())
+    np.savetxt(exp_dir + '/result.csv', result, delimiter=',', header=header, comments='')
 
 def validate(audio_model, val_loader, args, best_mse, kmeans_model=None):
     gpu_index = 0
@@ -220,6 +240,9 @@ def validate(audio_model, val_loader, args, best_mse, kmeans_model=None):
             else:
                 raise ValueError("Unexpected number of elements in data")
             
+            cluster_index = indexs + 1
+            cluster_index = cluster_index.to(device)
+            '''
             if (args.model == 'fluScorer' or args.model == 'flu_TFR') and args.load_cluster_index:
                 cluster_index = cluster_pred(feats, kmeans_model)
                 cluster_index = cluster_index.to(device)
@@ -230,6 +253,7 @@ def validate(audio_model, val_loader, args, best_mse, kmeans_model=None):
                     cluster_index_list.append(cluster_index)
                 cluster_index_tensor = torch.stack(cluster_index_list, dim=0)
                 cluster_index = cluster_index_tensor.to(device)
+            '''
 
             feats = feats.to(device)
             if args.model == 'fluScorer' or args.model == 'flu_TFR':
@@ -238,7 +262,7 @@ def validate(audio_model, val_loader, args, best_mse, kmeans_model=None):
                 flu_score = audio_model(feats)
             
             flu_score = flu_score.to('cpu').detach()
-            flu_label = torch.unsqueeze(torch.unsqueeze(utt_label[:, 2], 1), 1)
+            flu_label = torch.unsqueeze(torch.unsqueeze(utt_label[:, args.aspect_idx], 1), 1)
 
             A_flu.append(flu_score)
             A_flu_target.append(flu_label)
@@ -283,12 +307,13 @@ def custom_collate_fn(batch):
     batch = sorted(batch, key=lambda x: x[2].shape[0], reverse=True)
     
     # 提取排序後的資料
-    paths, utt_labels, feats = zip(*batch)
-
+    paths, utt_labels, feats, index = zip(*batch)
+    
     # 將 feat_x 轉換成一個批次，這裡使用 pad_sequence 進行填充
     padded_feats = pad_sequence(feats, batch_first=True)
+    padded_index = pad_sequence(index, batch_first=True, padding_value=-1)
 
-    return paths, torch.stack(utt_labels), padded_feats
+    return paths, torch.stack(utt_labels), padded_feats, padded_index
 
 class fluDataset(Dataset):
     def __init__(self, set, so762_dir, load_cluster_index=None):
@@ -308,7 +333,7 @@ class fluDataset(Dataset):
         self.paths = paths
         self.load_cluster_index = load_cluster_index
         if load_cluster_index:
-            with open(f'data/{dataset_type}_indexs.pkl', 'rb') as file:
+            with open(f'data/{dataset_type}_cluster_index.pkl', 'rb') as file:
                 self.index = pickle.load(file)
 
         with open(f'data/{dataset_type}_feats.pkl', 'rb') as file:
@@ -336,11 +361,28 @@ if __name__ == '__main__':
     if os.path.exists(args.exp_dir) == False:
         os.mkdir(args.exp_dir)
 
+    seed = args.seed
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+    aspect_map = {
+        'acc': 0,
+        'cpn': 1,
+        'flu': 2,
+        'psd': 3,
+        'ttl': 4,
+    }
+    args.aspect_idx = aspect_map[args.aspect]
+    print(f'Training aspect: {args.aspect}')
+
     print('Prepare datasets...')
-    tr_dataset = fluDataset('train', args.SO762_dir, not args.load_cluster_index)
+    tr_dataset = fluDataset('train', args.SO762_dir, args.load_cluster_index)
     tr_dataloader = DataLoader(tr_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=custom_collate_fn)
     # tr_dataloader = DataLoader(tr_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=custom_collate_fn)
-    te_dataset = fluDataset('test', args.SO762_dir, not args.load_cluster_index)
+    te_dataset = fluDataset('test', args.SO762_dir, args.load_cluster_index)
     te_dataloader = DataLoader(te_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=custom_collate_fn)
     print('Done.')
 
